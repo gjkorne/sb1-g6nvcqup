@@ -1,0 +1,152 @@
+import React from 'react';
+import { Menu, X, Settings, Calendar, Clock, BarChart, LogOut, Sun, Calendar as CalendarIcon, ListTodo, Star } from 'lucide-react';
+import { useState } from 'react';
+import { supabase } from '../lib/supabase';
+import { format } from 'date-fns';
+
+interface LayoutProps {
+  children: React.ReactNode;
+  view?: 'today' | 'upcoming' | 'all';
+  onViewChange?: (view: 'today' | 'upcoming' | 'all') => void;
+}
+
+export default function Layout({ children, view = 'all', onViewChange }: LayoutProps) {
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  const navigationItems = [
+    { icon: Sun, label: 'Today', value: 'today' },
+    { icon: CalendarIcon, label: 'Upcoming', value: 'upcoming' },
+    { icon: ListTodo, label: 'All Tasks', value: 'all' },
+  ];
+
+  return (
+    <div className="min-h-screen bg-gray-100">
+      {/* Sidebar */}
+      <div className={`fixed inset-y-0 left-0 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} w-64 bg-white shadow-lg transition-transform duration-200 ease-in-out z-20`}>
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-8">
+            <h2 className="text-xl font-semibold text-gray-800">Menu</h2>
+            <button onClick={() => setIsSidebarOpen(false)} className="p-2 hover:bg-gray-100 rounded-full">
+              <X className="w-5 h-5 text-gray-500" />
+            </button>
+          </div>
+          <nav className="space-y-2">
+            <div className="pb-4 border-b">
+              <p className="px-4 text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
+                Views
+              </p>
+              {navigationItems.map(({ icon: Icon, label, value }) => (
+                <button
+                  key={value}
+                  onClick={() => {
+                    onViewChange?.(value as 'today' | 'upcoming' | 'all');
+                    setIsSidebarOpen(false);
+                  }}
+                  className={`flex items-center w-full px-4 py-2 text-sm ${
+                    view === value
+                      ? 'text-blue-600 bg-blue-50'
+                      : 'text-gray-700 hover:bg-gray-50'
+                  } rounded-lg transition-colors`}
+                >
+                  <Icon className="w-5 h-5 mr-3" />
+                  <span>{label}</span>
+                </button>
+              ))}
+            </div>
+            <div className="pt-4">
+              <p className="px-4 text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
+                Features
+              </p>
+              {[
+                { icon: Clock, label: 'Pomodoro Timer' },
+                { icon: BarChart, label: 'Analytics' },
+                { icon: Settings, label: 'Settings' },
+              ].map(({ icon: Icon, label }) => (
+                <button
+                  key={label}
+                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+                >
+                  <Icon className="w-5 h-5 mr-3" />
+                  <span>{label}</span>
+                </button>
+              ))}
+            </div>
+          </nav>
+          <div className="absolute bottom-4 left-4 right-4">
+            <div className="p-4 bg-blue-50 rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <Star className="w-5 h-5 text-blue-600" />
+                <span className="text-xs text-blue-600">{format(new Date(), 'MMM d, yyyy')}</span>
+              </div>
+              <p className="text-sm text-blue-800 font-medium">Daily Progress</p>
+              <div className="mt-2 h-2 bg-blue-100 rounded-full overflow-hidden">
+                <div className="h-full bg-blue-600 rounded-full" style={{ width: '60%' }} />
+              </div>
+              <p className="mt-1 text-xs text-blue-600">6/10 tasks completed</p>
+            </div>
+            <button
+              onClick={() => supabase.auth.signOut()}
+              className="flex items-center gap-2 mt-4 p-2 w-full text-gray-600 hover:text-gray-900"
+            >
+              <LogOut className="w-5 h-5" />
+              <span>Sign out</span>
+            </button>
+          </div>
+        </div>
+      </div>
+      {/* Mobile navigation */}
+      <div className="lg:hidden fixed bottom-0 inset-x-0 bg-white border-t">
+        <nav className="flex justify-around py-2">
+          {navigationItems.map(({ icon: Icon, label, value }) => (
+            <button
+              key={value}
+              onClick={() => onViewChange?.(value as 'today' | 'upcoming' | 'all')}
+              className={`flex flex-col items-center p-2 ${
+                view === value ? 'text-blue-600' : 'text-gray-600'
+              }`}
+            >
+              <Icon className="w-6 h-6" />
+              <span className="text-xs mt-1">{label}</span>
+            </button>
+          ))}
+          <button
+            onClick={() => setIsSidebarOpen(true)}
+            className="flex flex-col items-center p-2 text-gray-600"
+          >
+            <Menu className="w-6 h-6" />
+            <span className="text-xs mt-1">Menu</span>
+          </button>
+        </nav>
+      </div>
+      {/* Overlay */}
+      {isSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 z-10"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
+      {/* Main content */}
+      <div className="flex flex-col min-h-screen pb-16 lg:pb-0">
+        <nav className="bg-white shadow-sm">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between h-16">
+              <div className="flex items-center">
+                <button
+                  onClick={() => setIsSidebarOpen(true)}
+                  className="p-2 rounded-md text-gray-400 lg:hidden hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+                >
+                  <Menu className="h-6 w-6" />
+                </button>
+                <h1 className="ml-4 text-xl font-semibold text-gray-900">AI Task Manager</h1>
+              </div>
+            </div>
+          </div>
+        </nav>
+        <main className="flex-1 max-w-3xl w-full mx-auto px-4 py-8">
+          {children}
+        </main>
+      </div>
+    </div>
+  );
+}
