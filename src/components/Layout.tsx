@@ -6,14 +6,15 @@ import { format } from 'date-fns';
 
 interface LayoutProps {
   children: React.ReactNode;
-  view?: 'today' | 'upcoming' | 'all';
-  onViewChange?: (view: 'today' | 'upcoming' | 'all') => void;
+  view?: 'dashboard' | 'today' | 'upcoming' | 'all';
+  onViewChange?: (view: 'dashboard' | 'today' | 'upcoming' | 'all') => void;
 }
 
 export default function Layout({ children, view = 'all', onViewChange }: LayoutProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const navigationItems = [
+    { icon: BarChart, label: 'Dashboard', value: 'dashboard' },
     { icon: Sun, label: 'Today', value: 'today' },
     { icon: CalendarIcon, label: 'Upcoming', value: 'upcoming' },
     { icon: ListTodo, label: 'All Tasks', value: 'all' },
@@ -22,11 +23,11 @@ export default function Layout({ children, view = 'all', onViewChange }: LayoutP
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Sidebar */}
-      <div className={`fixed inset-y-0 left-0 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} w-64 bg-white shadow-lg transition-transform duration-200 ease-in-out z-20`}>
+      <div className={`fixed inset-y-0 left-0 transform lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} w-64 bg-white shadow-lg transition-transform duration-200 ease-in-out z-20`}>
         <div className="p-6">
           <div className="flex items-center justify-between mb-8">
             <h2 className="text-xl font-semibold text-gray-800">Menu</h2>
-            <button onClick={() => setIsSidebarOpen(false)} className="p-2 hover:bg-gray-100 rounded-full">
+            <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden p-2 hover:bg-gray-100 rounded-full">
               <X className="w-5 h-5 text-gray-500" />
             </button>
           </div>
@@ -39,7 +40,7 @@ export default function Layout({ children, view = 'all', onViewChange }: LayoutP
                 <button
                   key={value}
                   onClick={() => {
-                    onViewChange?.(value as 'today' | 'upcoming' | 'all');
+                    onViewChange?.(value as 'dashboard' | 'today' | 'upcoming' | 'all');
                     setIsSidebarOpen(false);
                   }}
                   className={`flex items-center w-full px-4 py-2 text-sm ${
@@ -127,14 +128,14 @@ export default function Layout({ children, view = 'all', onViewChange }: LayoutP
       )}
 
       {/* Main content */}
-      <div className="flex flex-col min-h-screen pb-16 lg:pb-0">
+      <div className="flex flex-col min-h-screen pb-16 lg:pb-0 lg:pl-64">
         <nav className="bg-white shadow-sm">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between h-16">
               <div className="flex items-center">
                 <button
                   onClick={() => setIsSidebarOpen(true)}
-                  className="p-2 rounded-md text-gray-400 lg:hidden hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+                  className="p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 lg:hidden"
                 >
                   <Menu className="h-6 w-6" />
                 </button>

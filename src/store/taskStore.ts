@@ -22,6 +22,8 @@ interface TaskState {
   deleteTask: (taskId: string) => Promise<void>;
   restoreTask: (taskId: string) => Promise<void>;
   toggleSubtask: (taskId: string, subtaskIndex: number) => void;
+  updateTimeEstimate: (taskId: string, timeEstimate: TimeEstimate) => Promise<void>;
+  updateSubtaskTimeEstimate: (taskId: string, subtaskIndex: number, timeEstimate: TimeEstimate) => Promise<void>;
   setActiveTask: (task: Task | null) => void;
   updateTaskCategory: (taskId: string, category: string, add: boolean) => Promise<void>;
 }
@@ -37,6 +39,7 @@ export const useTaskStore = create<TaskState>((set) => ({
         *,
         subtasks (*)
       `)
+      .is('deleted_at', null)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -44,13 +47,30 @@ export const useTaskStore = create<TaskState>((set) => ({
       return;
     }
 
-    set({ tasks: tasks || [] });
+    // Convert time_estimate from database to TimeEstimate object
+    const formattedTasks = tasks?.map(task => ({
+      ...task,
+      timeEstimate: task.time_estimate ? {
+        value: task.time_estimate,
+        unit: 'minutes'
+      } : undefined,
+      subtasks: task.subtasks?.map((subtask: any) => ({
+        ...subtask,
+        timeEstimate: subtask.time_estimate ? {
+          value: subtask.time_estimate,
+          unit: 'minutes'
+        } : undefined
+      })) || []
+    })) || [];
+
+    set({ tasks: formattedTasks });
   },
   addTask: async (taskData) => {
     const newTask: Task = {
       id: uuidv4(),
       title: taskData.title || '',
-      category: taskData.category || 'general',
+      timeEstimate: taskData.timeEstimate,
+      category: Array.isArray(taskData.category) ? taskData.category : [taskData.category || 'general'],
       tags: taskData.tags || [],
       status: 'todo',
       timeSpent: 0,
@@ -69,7 +89,12 @@ export const useTaskStore = create<TaskState>((set) => ({
           id: newTask.id,
           title: newTask.title,
           description: newTask.description,
-          category: newTask.category,
+          time_estimate: taskData.timeEstimate ? (
+            taskData.timeEstimate.unit === 'hours' 
+              ? taskData.timeEstimate.value * 60 
+              : taskData.timeEstimate.value
+          ) : null,
+          category: Array.isArray(newTask.category) ? newTask.category : [newTask.category],
           tags: newTask.tags,
           status: newTask.status,
           due_date: newTask.dueDate,
@@ -90,6 +115,11 @@ export const useTaskStore = create<TaskState>((set) => ({
               task_id: newTask.id,
               title: subtask.title,
               description: subtask.description,
+              time_estimate: subtask.timeEstimate ? (
+                subtask.timeEstimate.unit === 'hours'
+                  ? subtask.timeEstimate.value * 60
+                  : subtask.timeEstimate.value
+              ) : null,
               completed: subtask.completed || false
             }))
           );
@@ -335,6 +365,80 @@ export const useTaskStore = create<TaskState>((set) => ({
       }));
     } catch (error) {
       console.error('Error toggling subtask:', error);
+    }
+  },
+  updateTimeEstimate: async (taskId, timeEstimate) => {
+    try {
+      // Convert to minutes for database storage
+      const timeEstimateMinutes = timeEstimate.unit === 'hours'
+        ? timeEstimate.value * 60
+        : timeEstimate.value;
+      
+      const { error } = await supabase
+        .from('tasks')
+        .update({
+          time_estimate: timeEstimateMinutes,
+          updated_at: new Date()
+        })
+        .eq('id', taskId);
+        
+      if (error) throw error;
+      
+      set((state) => ({
+        tasks: state.tasks.map((task) =>
+          task.id === taskId
+            ? {
+                ...task,
+                timeEstimate,
+                updatedAt: new Date()
+              }
+            : task
+        ),
+      }));
+    } catch (error) {
+      console.error('Error updating time estimate:', error);
+    }
+  },
+  updateSubtaskTimeEstimate: async (taskId, subtaskIndex, timeEstimate) => {
+    try {
+      const task = useTaskStore.getState().tasks.find(t => t.id === taskId);
+      if (!task || !task.subtasks[subtaskIndex]) return;
+      
+      const subtask = task.subtasks[subtaskIndex];
+      
+      // Convert to minutes for database storage
+      const timeEstimateMinutes = timeEstimate.unit === 'hours'
+        ? timeEstimate.value * 60
+        : timeEstimate.value;
+      
+      const { error } = await supabase
+        .from('subtasks')
+        .update({
+          time_estimate: timeEstimateMinutes,
+          updated_at: new Date()
+        })
+        .eq('task_id', taskId)
+        .eq('title', subtask.title);
+        
+      if (error) throw error;
+      
+      set((state) => ({
+        tasks: state.tasks.map((task) =>
+          task.id === taskId
+            ? {
+                ...task,
+                subtasks: task.subtasks.map((s, index) =>
+                  index === subtaskIndex
+                    ? { ...s, timeEstimate }
+                    : s
+                ),
+                updatedAt: new Date()
+              }
+            : task
+        ),
+      }));
+    } catch (error) {
+      console.error('Error updating subtask time estimate:', error);
     }
   },
   setActiveTask: (task) =>

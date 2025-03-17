@@ -1,3 +1,15 @@
+export interface TimeEstimate {
+  value: number;
+  unit: 'minutes' | 'hours';
+}
+
+export interface SubtaskWithEstimate {
+  title: string;
+  description: string;
+  completed?: boolean;
+  timeEstimate?: TimeEstimate;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -5,17 +17,14 @@ export interface Task {
   category: string;
   tags: string[];
   priority: 'low' | 'medium' | 'high';
+  timeEstimate?: TimeEstimate;
   recurrence?: {
     type: 'daily' | 'weekly' | 'monthly';
     interval: number;
   };
   dependencies?: string[];
   progress: number;
-  subtasks: {
-    title: string;
-    description: string;
-    completed?: boolean;
-  }[];
+  subtasks: SubtaskWithEstimate[];
   status: 'todo' | 'in_progress' | 'completed';
   dueDate?: Date;
   timeSpent: number; // in seconds
@@ -38,12 +47,30 @@ export interface PomodoroSettings {
   currentSession: 'work' | 'break' | null;
 }
 
+export interface FocusSettings {
+  autoStartTimer: boolean;
+  showSubtasks: boolean;
+  enableNotifications: boolean;
+  theme: 'light' | 'dark';
+}
+
+export interface FocusSession {
+  taskId: string;
+  startTime: Date;
+  endTime?: Date;
+  duration: number;
+  interruptions: number;
+}
+
 export interface NLPTaskResult {
   title: string;
   category: string;
   aiResponse: string;
   dueDate?: Date;
   tags: string[];
+  timeEstimate?: TimeEstimate;
+  clarifyingQuestions?: string[];
+  priority?: 'low' | 'medium' | 'high';
   subtasks: {
     title: string;
     description: string;
