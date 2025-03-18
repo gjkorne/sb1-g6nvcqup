@@ -254,7 +254,18 @@ export const useTimeStore = create<TimeState>()(
       syncTimeData: async () => {
         const { currentSession, syncStatus } = get();
         
-        if (!currentSession) return;
+        // Check authentication first
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user || !currentSession) {
+          set({
+            syncStatus: {
+              state: 'error',
+              lastSynced: get().syncStatus.lastSynced,
+              error: !user ? 'User not authenticated' : 'No active session'
+            }
+          });
+          return;
+        }
         
         try {
           set({ syncStatus: { ...syncStatus, state: 'syncing' } });
@@ -266,6 +277,7 @@ export const useTimeStore = create<TimeState>()(
           const { error } = await supabase
             .from('time_sessions')
             .update({ duration })
+            .eq('user_id', user.id)
             .eq('id', currentSession.id);
 
           if (error) throw error;

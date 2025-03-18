@@ -1,8 +1,8 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useTaskStore } from '../store/taskStore';
 import { useTimeStore } from '../store/timeStore';
-import { format, startOfDay, endOfDay, addHours, isSameDay, isWithinInterval, differenceInMinutes } from 'date-fns';
-import { Clock, CheckCircle, AlertCircle, BarChart2, Timer } from 'lucide-react';
+import { format, startOfDay, endOfDay, addHours, isSameDay, isWithinInterval, differenceInMinutes, parseISO } from 'date-fns';
+import { Clock, CheckCircle, AlertCircle, BarChart2, Timer, Play, Pause, Tag } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Task } from '../types';
 import TimelineBlock from './TimelineBlock';
@@ -15,29 +15,59 @@ const TOTAL_HOURS = END_HOUR - START_HOUR;
 
 export default function TodayView() {
   const tasks = useTaskStore(state => state.tasks);
-  const { sessions, getTaskTime } = useTimeStore();
+  const { sessions, getTaskTime, startTracking, isTracking, activeTaskId, stopTracking } = useTimeStore();
+  const [refreshTime, setRefreshTime] = useState(Date.now()); // For auto-refreshing
   
   // Get today's date boundaries
   const today = new Date();
   const dayStart = startOfDay(today);
   const dayEnd = endOfDay(today);
 
+  // Effect for auto-refreshing while tracking
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+    
+    if (isTracking) {
+      interval = setInterval(() => {
+        setRefreshTime(Date.now());
+      }, 60000); // Update every minute
+    }
+    
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isTracking]);
+
   // Filter tasks and sessions for today
   const todaysTasks = useMemo(() => {
     return tasks.filter(task => 
-      task.dueDate && 
-      isSameDay(new Date(task.dueDate), today)
+      (task.dueDate && isSameDay(
+        typeof task.dueDate === 'string' ? parseISO(task.dueDate) : task.dueDate, 
+        today
+      )) || 
+      // Also include tasks that have time sessions today
+      sessions.some(s => 
+        s.task_id === task.id && 
+        isWithinInterval(
+          typeof s.start_time === 'string' ? parseISO(s.start_time) : s.start_time,
+          { start: dayStart, end: dayEnd }
+        )
+      )
     );
-  }, [tasks, today]);
+  }, [tasks, sessions, today, dayStart, dayEnd]);
 
   const todaysSessions = useMemo(() => {
-    return sessions.filter(session => 
-      isWithinInterval(new Date(session.start_time), {
+    return sessions.filter(session => {
+      const sessionStartTime = typeof session.start_time === 'string' 
+        ? parseISO(session.start_time) 
+        : session.start_time;
+        
+      return isWithinInterval(sessionStartTime, {
         start: dayStart,
         end: dayEnd
-      })
-    );
-  }, [sessions, dayStart, dayEnd]);
+      });
+    });
+  }, [sessions, dayStart, dayEnd, refreshTime]); // Added refreshTime to trigger re-evaluation
 
   // Calculate statistics
   const totalTrackedTime = todaysSessions.reduce((total, session) => 
@@ -57,6 +87,34 @@ export default function TodayView() {
     });
     return grouped;
   }, [todaysSessions]);
+  
+  // Calculate time spent by category
+  const categoryTimeTracking = useMemo(() => {
+    const categoryMap = new Map<string, number>();
+    const taskCategoryMap = new Map<string, string[]>();
+    
+    // Create mapping of task IDs to their categories
+    todaysTasks.forEach(task => {
+      const categories = Array.isArray(task.category) ? task.category : [task.category || 'Uncategorized'];
+      taskCategoryMap.set(task.id, categories);
+    });
+    
+    // Calculate time spent per category
+    todaysSessions.forEach(session => {
+      const taskId = session.task_id;
+      const categories = taskCategoryMap.get(taskId) || ['Uncategorized'];
+      
+      categories.forEach(category => {
+        const currentTime = categoryMap.get(category) || 0;
+        categoryMap.set(category, currentTime + session.duration);
+      });
+    });
+    
+    // Convert to array and sort by time spent (descending)
+    return Array.from(categoryMap.entries())
+      .map(([category, duration]) => ({ category, duration }))
+      .sort((a, b) => b.duration - a.duration);
+  }, [todaysTasks, todaysSessions]);
 
   // Generate timeline hours
   const timelineHours = Array.from(
@@ -69,6 +127,15 @@ export default function TodayView() {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     return `${hours}h ${minutes}m`;
+  };
+
+  // Get the current hour marker position
+  const getCurrentTimePosition = () => {
+    const now = new Date();
+    const minutesSinceDayStart = differenceInMinutes(now, dayStart);
+    const hoursSinceDayStart = minutesSinceDayStart / 60;
+    
+    return Math.max(0, (hoursSinceDayStart - START_HOUR) * HOUR_HEIGHT);
   };
 
   return (
@@ -131,6 +198,77 @@ export default function TodayView() {
           </div>
         </motion.div>
       </div>
+      
+      {/* Category Time Distribution */}
+      <div className="bg-white rounded-lg shadow-sm p-6 mb-8">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <Tag className="w-5 h-5 text-gray-500" />
+          Category Time Distribution
+        </h2>
+        
+        <div className="space-y-4">
+          {categoryTimeTracking.length > 0 ? (
+            <>
+              {/* Top categories visualization */}
+              <div className="flex items-center w-full h-6 rounded-full overflow-hidden">
+                {categoryTimeTracking.slice(0, 4).map((category, index) => {
+                  const percentage = (category.duration / totalTrackedTime) * 100;
+                  if (percentage < 3) return null; // Don't show very small segments
+                  
+                  // Color palette for top categories
+                  const colors = [
+                    'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-gray-500'
+                  ];
+                  
+                  return (
+                    <div 
+                      key={category.category} 
+                      className={`${colors[index]} h-full`} 
+                      style={{ width: `${percentage}%` }}
+                      title={`${category.category}: ${formatTimeDisplay(category.duration)}`}
+                    />
+                  );
+                })}
+              </div>
+              
+              {/* Category breakdown */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4">
+                {categoryTimeTracking.slice(0, 4).map((category, index) => {
+                  const percentage = (category.duration / totalTrackedTime) * 100;
+                  
+                  // Color palette for labels
+                  const colors = [
+                    'text-blue-500', 'text-green-500', 'text-purple-500', 'text-gray-500'
+                  ];
+                  
+                  return (
+                    <div key={category.category} className="flex flex-col">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-3 h-3 rounded-full ${colors[index].replace('text', 'bg')}`} />
+                        <span className="text-sm font-medium truncate">
+                          {category.category}
+                        </span>
+                      </div>
+                      <div className="flex items-baseline justify-between mt-1">
+                        <span className={`text-sm ${colors[index]}`}>
+                          {formatTimeDisplay(category.duration)}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          {percentage.toFixed(1)}%
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <div className="text-center py-4 text-gray-500">
+              <p>No categories tracked today</p>
+            </div>
+          )}
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Timeline */}
@@ -153,14 +291,16 @@ export default function TodayView() {
 
             {/* Current time indicator */}
             <div
-              className="absolute left-16 right-0 flex items-center"
+              className="absolute left-16 right-0 flex items-center z-30"
               style={{
-                top: `${(differenceInMinutes(today, dayStart) / 60 - START_HOUR) * HOUR_HEIGHT}px`,
-                zIndex: 20
+                top: `${getCurrentTimePosition()}px`
               }}
             >
-              <div className="w-2 h-2 bg-red-500 rounded-full" />
+              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
               <div className="flex-1 border-t border-red-500 border-dashed" />
+              <span className="text-xs text-red-500 font-medium px-1">
+                {format(new Date(), 'HH:mm')}
+              </span>
             </div>
 
             {/* Task and session blocks */}
@@ -171,6 +311,10 @@ export default function TodayView() {
                 sessions={sessionsByTask.get(task.id) || []}
                 startHour={START_HOUR}
                 hourHeight={HOUR_HEIGHT}
+                isActiveTask={activeTaskId === task.id}
+                onStartTracking={() => startTracking(task.id)}
+                onStopTracking={() => stopTracking()}
+                isTracking={isTracking}
               />
             ))}
           </div>
