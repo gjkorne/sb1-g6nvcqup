@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
 import { persist } from 'zustand/middleware';
+import { useTaskStore } from './taskStore';
+import { createTimeSyncManager, calculateTimeStatistics, TimeStatistics } from '../utils/timeTrackingUtils';
 
 interface TimeSession {
   id?: string;
@@ -9,6 +11,9 @@ interface TimeSession {
   end_time?: Date | null;
   duration: number;
   user_id?: string;
+  time_zone?: string;
+  session_type?: 'manual' | 'pomodoro' | 'focus' | 'auto';
+  notes?: string;
 }
 
 interface SyncStatus {
@@ -23,12 +28,19 @@ interface TimeState {
   currentSession: TimeSession | null;
   sessions: TimeSession[];
   syncStatus: SyncStatus;
+  statistics: TimeStatistics | null;
+  loadSessions: () => Promise<void>;
   startTracking: (taskId: string) => void;
   pauseTracking: () => void;
   stopTracking: () => void;
   getTaskTime: (taskId: string) => number;
   syncTimeData: () => Promise<void>;
+  calculateStatistics: (tasks: any[]) => void;
+  addNote: (sessionId: string, note: string) => Promise<void>;
+  setSessionType: (type: TimeSession['session_type']) => void;
 }
+
+const timeSyncManager = createTimeSyncManager();
 
 export const useTimeStore = create<TimeState>()(
   persist(
@@ -37,10 +49,42 @@ export const useTimeStore = create<TimeState>()(
       activeTaskId: null,
       currentSession: null,
       sessions: [],
+      statistics: null,
       syncStatus: {
         state: 'synced',
         lastSynced: null,
         error: null
+      },
+
+      loadSessions: async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const today = new Date();
+        const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
+        const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+
+        const { data: sessions, error } = await supabase
+          .from('time_sessions')
+          .select('*')
+          .eq('user_id', user.id)
+          .gte('start_time', startOfToday.toISOString())
+          .lte('start_time', endOfToday.toISOString())
+          .order('start_time', { ascending: false });
+
+        if (error) {
+          console.error('Error loading time sessions:', error);
+          return;
+        }
+
+        // Convert string dates to Date objects
+        const formattedSessions = sessions.map(session => ({
+          ...session,
+          start_time: session.start_time,
+          end_time: session.end_time,
+          duration: session.duration || Math.floor((new Date().getTime() - new Date(session.start_time).getTime()) / 1000)
+        }));
+
+        set({ sessions: formattedSessions });
       },
 
       startTracking: async (taskId: string) => {
@@ -49,6 +93,17 @@ export const useTimeStore = create<TimeState>()(
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
           console.error('User must be authenticated to track time');
+          return;
+        }
+        
+        // Update task status in Supabase
+        const { error: taskError } = await supabase
+          .from('tasks')
+          .update({ task_status: 'in_progress' })
+          .eq('id', taskId);
+
+        if (taskError) {
+          console.error('Error updating task status:', taskError);
           return;
         }
 
@@ -232,6 +287,53 @@ export const useTimeStore = create<TimeState>()(
             }
           });
         }
+      },
+
+      calculateStatistics: (tasks) => {
+        const { sessions } = get();
+        const stats = calculateTimeStatistics(sessions, tasks);
+        set({ statistics: stats });
+      },
+      
+      addNote: async (sessionId: string, note: string) => {
+        const { error } = await supabase
+          .from('time_sessions')
+          .update({ notes: note })
+          .eq('id', sessionId);
+
+        if (error) {
+          console.error('Error adding note:', error);
+          return;
+        }
+
+        set(state => ({
+          sessions: state.sessions.map(session =>
+            session.id === sessionId
+              ? { ...session, notes: note }
+              : session
+          )
+        }));
+      },
+
+      setSessionType: async (type) => {
+        const { currentSession } = get();
+        if (!currentSession) return;
+
+        const { error } = await supabase
+          .from('time_sessions')
+          .update({ session_type: type })
+          .eq('id', currentSession.id);
+
+        if (error) {
+          console.error('Error updating session type:', error);
+          return;
+        }
+
+        set(state => ({
+          currentSession: state.currentSession
+            ? { ...state.currentSession, session_type: type }
+            : null
+        }));
       }
     }),
     {

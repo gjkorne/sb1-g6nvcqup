@@ -2,10 +2,12 @@ import OpenAI from 'openai';
 import { NLPTaskResult } from '../types';
 import { parseISO } from 'date-fns';
 
-const API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
+const API_KEY = import.meta.env.VITE_OPENAI_API_KEY?.trim();
 
 // Check if API key is properly configured
-const isValidApiKey = API_KEY && API_KEY !== 'your_api_key_here';
+const isValidApiKey = API_KEY && 
+  API_KEY.startsWith('sk-') && 
+  API_KEY.length > 40;
 
 const openai = isValidApiKey 
   ? new OpenAI({
@@ -20,11 +22,11 @@ export async function processTaskWithNLP(input: string): Promise<NLPTaskResult &
     return {
       title: input,
       category: 'general',
-      aiResponse: "I've added this as a basic task since I couldn't process it with AI at the moment.",
+      aiResponse: "I've added this as a basic task. Please make sure your OpenAI API key is properly configured in the .env file. The key should start with 'sk-' and be about 51 characters long.",
       tags: [],
       subtasks: [],
       description: null,
-      error: 'OpenAI API key not configured',
+      error: 'OpenAI API key not configured or invalid. Please check your .env file.',
       timeEstimate: null
     };
   }

@@ -2,17 +2,23 @@ import React, { useEffect, useState } from 'react';
 import Layout from './components/Layout';
 import TaskInput from './components/TaskInput';
 import TaskList from './components/TaskList';
+import TodayView from './components/TodayView';
+import ActiveTask from './components/ActiveTask';
 import Dashboard from './components/Dashboard';
 import FocusMode from './components/FocusMode';
+import AIAssistant from './components/AIAssistant';
 import { useTaskStore } from './store/taskStore';
+import { useTimeStore } from './store/timeStore';
 import { Bot } from 'lucide-react';
 import { supabase } from './lib/supabase';
 import Auth from './components/Auth';
 import { startOfDay, endOfDay, addDays } from 'date-fns';
 
+
 function App() {
   const tasks = useTaskStore((state) => state.tasks);
   const loadTasks = useTaskStore((state) => state.loadTasks);
+  const loadSessions = useTimeStore((state) => state.loadSessions);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [view, setView] = useState<'dashboard' | 'today' | 'upcoming' | 'all'>('dashboard');
@@ -22,14 +28,20 @@ function App() {
       setIsAuthenticated(!!session);
       setIsLoading(false);
       if (session) {
-        loadTasks();
+        Promise.all([
+          loadTasks(),
+          loadSessions()
+        ]);
       }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setIsAuthenticated(!!session);
       if (session) {
-        loadTasks();
+        Promise.all([
+          loadTasks(),
+          loadSessions()
+        ]);
       }
     });
 
@@ -70,11 +82,15 @@ function App() {
 
   return (
     <Layout view={view} onViewChange={setView}>
+      <ActiveTask />
       <FocusMode />
+      <AIAssistant />
       <div className="flex flex-col h-[calc(100vh-4rem)]">
         <div className="flex-1 overflow-y-auto pb-4 px-4">
           {view === 'dashboard' ? (
             <Dashboard />
+          ) : view === 'today' ? (
+            <TodayView />
           ) : filteredTasks.length === 0 ? (
             <div className="text-center py-12">
               <Bot className="w-12 h-12 mx-auto text-gray-400 mb-4" />

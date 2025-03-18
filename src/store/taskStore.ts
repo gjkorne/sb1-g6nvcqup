@@ -12,6 +12,8 @@ async function getCurrentUserId() {
 interface TaskState {
   tasks: Task[];
   activeTask: Task | null;
+  setTaskActive: (taskId: string) => Promise<void>;
+  getActiveTask: () => Task | null;
   deletedTasks: Task[];
   loadTasks: () => Promise<void>;
   addTask: (taskData: Partial<Task>) => Promise<void>;
@@ -32,6 +34,28 @@ export const useTaskStore = create<TaskState>((set) => ({
   tasks: [],
   deletedTasks: [],
   activeTask: null,
+  setTaskActive: async (taskId) => {
+    try {
+      const { error } = await supabase
+        .from('tasks')
+        .update({ task_status: 'in_progress' })
+        .eq('id', taskId);
+
+      if (error) throw error;
+
+      set((state) => ({
+        tasks: state.tasks.map(task =>
+          task.id === taskId
+            ? { ...task, task_status: 'in_progress' }
+            : task
+        ),
+        activeTask: state.tasks.find(task => task.id === taskId) || null
+      }));
+    } catch (error) {
+      console.error('Error setting task active:', error);
+    }
+  },
+  getActiveTask: () => get().activeTask,
   loadTasks: async () => {
     const { data: tasks, error } = await supabase
       .from('tasks')
@@ -286,7 +310,7 @@ export const useTaskStore = create<TaskState>((set) => ({
 
       if (error) throw error;
 
-      const deletedTask = get().tasks.find(t => t.id === taskId);
+      const deletedTask = useTaskStore.getState().tasks.find(t => t.id === taskId);
       set((state) => ({
         tasks: state.tasks.filter(t => t.id !== taskId),
         deletedTasks: [...state.deletedTasks, deletedTask],
@@ -294,7 +318,7 @@ export const useTaskStore = create<TaskState>((set) => ({
 
       // Schedule hard delete after 10 seconds
       setTimeout(async () => {
-        const stillDeleted = get().deletedTasks.some(t => t.id === taskId);
+        const stillDeleted = useTaskStore.getState().deletedTasks.some(t => t.id === taskId);
         if (stillDeleted) {
           const { error } = await supabase
             .from('tasks')

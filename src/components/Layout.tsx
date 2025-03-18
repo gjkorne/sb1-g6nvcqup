@@ -1,8 +1,10 @@
 import React from 'react';
-import { Menu, X, Settings, Calendar, Clock, BarChart, LogOut, Sun, Calendar as CalendarIcon, ListTodo, Star } from 'lucide-react';
-import { useState } from 'react';
+import { Menu, X, Settings, Calendar, Clock, BarChart, LogOut, Sun, Calendar as CalendarIcon, ListTodo, Star, PieChart } from 'lucide-react';
+import { useState, lazy, Suspense } from 'react';
 import { supabase } from '../lib/supabase';
 import { format } from 'date-fns';
+
+const TimeAnalyticsDashboard = lazy(() => import('./TimeAnalyticsDashboard'));
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -12,6 +14,7 @@ interface LayoutProps {
 
 export default function Layout({ children, view = 'all', onViewChange }: LayoutProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [showAnalytics, setShowAnalytics] = useState(false);
 
   const navigationItems = [
     { icon: BarChart, label: 'Dashboard', value: 'dashboard' },
@@ -58,19 +61,19 @@ export default function Layout({ children, view = 'all', onViewChange }: LayoutP
               <p className="px-4 text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
                 Features
               </p>
-              {[
-                { icon: Clock, label: 'Pomodoro Timer' },
-                { icon: BarChart, label: 'Analytics' },
-                { icon: Settings, label: 'Settings' },
-              ].map(({ icon: Icon, label }) => (
-                <button
-                  key={label}
-                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
-                >
-                  <Icon className="w-5 h-5 mr-3" />
-                  <span>{label}</span>
-                </button>
-              ))}
+              <button
+                onClick={() => setShowAnalytics(true)}
+                className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+              >
+                <PieChart className="w-5 h-5 mr-3" />
+                <span>Time Analytics</span>
+              </button>
+              <button
+                className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+              >
+                <Settings className="w-5 h-5 mr-3" />
+                <span>Settings</span>
+              </button>
             </div>
           </nav>
           <div className="absolute bottom-4 left-4 right-4">
@@ -146,6 +149,30 @@ export default function Layout({ children, view = 'all', onViewChange }: LayoutP
         </nav>
         <main className="flex-1 max-w-3xl w-full mx-auto px-4 py-8">
           {children}
+          {showAnalytics && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+                <div className="flex items-center justify-between p-4 border-b">
+                  <h2 className="text-xl font-semibold">Time Analytics</h2>
+                  <button
+                    onClick={() => setShowAnalytics(false)}
+                    className="p-2 hover:bg-gray-100 rounded-full"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                <div className="p-4">
+                  <Suspense fallback={
+                    <div className="flex items-center justify-center h-64">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" />
+                    </div>
+                  }>
+                    <TimeAnalyticsDashboard />
+                  </Suspense>
+                </div>
+              </div>
+            </div>
+          )}
         </main>
       </div>
     </div>
