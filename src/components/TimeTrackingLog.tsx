@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { format, parseISO } from 'date-fns';
-import { Clock, ChevronDown, ChevronRight, Play, Pause, Timer, Tag } from 'lucide-react';
+import { Clock, ChevronDown, ChevronRight, Play, Pause, Timer } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Task } from '../types';
+import { Task, TimeSession } from '../types';
 import { useTimeStore } from '../store/timeStore';
 import { formatDurationDetailed } from '../utils/timeTrackingUtils';
 
@@ -32,7 +32,7 @@ const getCategoryColor = (category: string | string[] | null | undefined, opacit
 };
 
 interface TimeTrackingLogProps {
-  sessions: any[];
+  sessions: TimeSession[];
   tasks: Task[];
 }
 
@@ -40,8 +40,7 @@ export default function TimeTrackingLog({ sessions, tasks }: TimeTrackingLogProp
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
   const { startTracking, isTracking, activeTaskId, stopTracking } = useTimeStore();
 
-  // Group sessions by task
-  const sessionsByTask = sessions.filter(session => session.task_id)
+  const sessionsByTask = useMemo(() => sessions.filter(session => session.task_id)
     .sort((a, b) => {
       const dateA = typeof a.start_time === 'string' ? parseISO(a.start_time) : a.start_time;
       const dateB = typeof b.start_time === 'string' ? parseISO(b.start_time) : b.start_time;
@@ -71,7 +70,14 @@ export default function TimeTrackingLog({ sessions, tasks }: TimeTrackingLogProp
       });
     }
     return groups;
-  }, [] as any[]);
+  }, [] as {
+    taskId: string;
+    taskTitle: string;
+    taskCategory: string | string[];
+    sessions: TimeSession[];
+    totalDuration: number;
+    isActive: boolean;
+  }[]), [sessions, tasks]);
 
   const toggleTask = (taskId: string) => {
     setExpandedTasks(prev => {
@@ -100,21 +106,14 @@ export default function TimeTrackingLog({ sessions, tasks }: TimeTrackingLogProp
           key={group.taskId} 
           className={`border rounded-lg transition-colors ${
             group.isActive ? 'border-green-400 bg-green-50' : 'hover:border-gray-300'
-          }`}
+          }`} 
         >
-          <button
+          <div 
+            className="flex items-center justify-between p-3 cursor-pointer"
             onClick={() => toggleTask(group.taskId)}
-            className="w-full flex items-center justify-between p-3 hover:bg-gray-50 transition-colors"
           >
             <div>
-              <h3 className="font-medium text-gray-900 flex items-center gap-2">
-                {group.taskTitle}
-                {group.isActive && (
-                  <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full animate-pulse">
-                    Active
-                  </span>
-                )}
-              </h3>
+              <h3 className="font-medium text-gray-900">{group.taskTitle}</h3>
               <div className="flex items-center gap-2 mt-1">
                 <span className="text-sm text-gray-500">{formatDurationDetailed(group.totalDuration)}</span>
                 {group.taskCategory && (
@@ -130,36 +129,35 @@ export default function TimeTrackingLog({ sessions, tasks }: TimeTrackingLogProp
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div
+              className="flex items-center gap-2"
+              onClick={e => e.stopPropagation()}
+            >
               {group.taskId === activeTaskId ? (
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleStopTracking();
-                  }}
+                  onClick={handleStopTracking}
                   className="p-1 text-red-600 hover:bg-red-50 rounded"
                 >
                   <Pause className="w-5 h-5" />
                 </button>
               ) : (
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleStartTracking(group.taskId);
-                  }}
+                  onClick={() => handleStartTracking(group.taskId)}
                   disabled={isTracking}
                   className="p-1 text-green-600 hover:bg-green-50 rounded disabled:opacity-50"
                 >
                   <Play className="w-5 h-5" />
                 </button>
               )}
-              {expandedTasks.has(group.taskId) ? (
-                <ChevronDown className="w-5 h-5 text-gray-400" />
-              ) : (
-                <ChevronRight className="w-5 h-5 text-gray-400" />
-              )}
+              <span className="p-1 text-gray-400">
+                {expandedTasks.has(group.taskId) ? (
+                  <ChevronDown className="w-5 h-5" />
+                ) : (
+                  <ChevronRight className="w-5 h-5" />
+                )}
+              </span>
             </div>
-          </button>
+          </div>
 
           <AnimatePresence>
             {expandedTasks.has(group.taskId) && (

@@ -1,3 +1,4 @@
+// src/components/TodayView.tsx (Updated)
 import React, { useMemo, useState, useEffect } from 'react';
 import { useTaskStore } from '../store/taskStore';
 import { useTimeStore } from '../store/timeStore';
@@ -5,8 +6,9 @@ import { format, startOfDay, endOfDay, addHours, isSameDay, isWithinInterval, di
 import { Clock, CheckCircle, AlertCircle, BarChart2, Timer, Play, Pause, Tag } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Task } from '../types';
-import TimelineBlock from './TimelineBlock';
+import EnhancedTimelineBlock from './EnhancedTimelineBlock';
 import TimeTrackingLog from './TimeTrackingLog';
+import { getCategoryColor } from './EnhancedTimelineBlock';
 
 const HOUR_HEIGHT = 60; // pixels per hour
 const START_HOUR = 6; // 6 AM
@@ -215,16 +217,14 @@ export default function TodayView() {
                   const percentage = (category.duration / totalTrackedTime) * 100;
                   if (percentage < 3) return null; // Don't show very small segments
                   
-                  // Color palette for top categories
-                  const colors = [
-                    'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-gray-500'
-                  ];
-                  
                   return (
                     <div 
                       key={category.category} 
-                      className={`${colors[index]} h-full`} 
-                      style={{ width: `${percentage}%` }}
+                      className="h-full" 
+                      style={{ 
+                        width: `${percentage}%`,
+                        backgroundColor: getCategoryColor(category.category, 0.8)
+                      }}
                       title={`${category.category}: ${formatTimeDisplay(category.duration)}`}
                     />
                   );
@@ -235,22 +235,18 @@ export default function TodayView() {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4">
                 {categoryTimeTracking.slice(0, 4).map((category, index) => {
                   const percentage = (category.duration / totalTrackedTime) * 100;
-                  
-                  // Color palette for labels
-                  const colors = [
-                    'text-blue-500', 'text-green-500', 'text-purple-500', 'text-gray-500'
-                  ];
+                  const categoryColor = getCategoryColor(category.category, 1);
                   
                   return (
                     <div key={category.category} className="flex flex-col">
                       <div className="flex items-center gap-2">
-                        <div className={`w-3 h-3 rounded-full ${colors[index].replace('text', 'bg')}`} />
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: categoryColor }} />
                         <span className="text-sm font-medium truncate">
                           {category.category}
                         </span>
                       </div>
                       <div className="flex items-baseline justify-between mt-1">
-                        <span className={`text-sm ${colors[index]}`}>
+                        <span className="text-sm" style={{ color: categoryColor }}>
                           {formatTimeDisplay(category.duration)}
                         </span>
                         <span className="text-xs text-gray-500">
@@ -305,7 +301,7 @@ export default function TodayView() {
 
             {/* Task and session blocks */}
             {todaysTasks.map(task => (
-              <TimelineBlock
+              <EnhancedTimelineBlock
                 key={task.id}
                 task={task}
                 sessions={sessionsByTask.get(task.id) || []}

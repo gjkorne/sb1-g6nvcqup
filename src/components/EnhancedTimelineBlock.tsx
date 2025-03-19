@@ -1,3 +1,4 @@
+// src/components/EnhancedTimelineBlock.tsx
 import React from 'react';
 import { motion } from 'framer-motion';
 import { format, differenceInMinutes, startOfDay, parseISO } from 'date-fns';
@@ -5,7 +6,10 @@ import { Task } from '../types';
 import { Play, Pause, CheckCircle, Clock, AlertCircle, Tag } from 'lucide-react';
 
 // Helper function to get color based on category
-const getCategoryColor = (category: string, opacity: number = 1): string => {
+export const getCategoryColor = (category: string | string[] | null | undefined, opacity: number = 1): string => {
+  // Handle array of categories by using the first one
+  const categoryValue = Array.isArray(category) ? category[0] : category;
+
   const categoryColors: {[key: string]: string} = {
     'work': `rgba(59, 130, 246, ${opacity})`, // blue
     'personal': `rgba(124, 58, 237, ${opacity})`, // purple
@@ -19,7 +23,11 @@ const getCategoryColor = (category: string, opacity: number = 1): string => {
     'travel': `rgba(168, 85, 247, ${opacity})`, // violet
   };
 
-  return categoryColors[category?.toLowerCase()] || `rgba(107, 114, 128, ${opacity})`; // Default gray
+  // Handle null, undefined, or empty string cases
+  if (!categoryValue) return `rgba(107, 114, 128, ${opacity})`; // Default gray
+  
+  const key = typeof categoryValue === 'string' ? categoryValue.toLowerCase() : '';
+  return categoryColors[key] || `rgba(107, 114, 128, ${opacity})`; // Default gray
 };
 
 interface TimelineBlockProps {
@@ -33,7 +41,7 @@ interface TimelineBlockProps {
   onStopTracking: () => void;
 }
 
-export default function TimelineBlock({ 
+export default function EnhancedTimelineBlock({ 
   task, 
   sessions, 
   startHour, 
@@ -62,43 +70,40 @@ export default function TimelineBlock({
     ? (typeof task.dueDate === 'string' ? parseISO(task.dueDate) : task.dueDate)
     : null;
   
-  // Get the primary category
-  const primaryCategory = Array.isArray(task.category) ? task.category[0] : task.category;
-  
-  // Don't use interpolation for classes in React/JSX
-  const getTaskStatusClasses = () => {
+  // Calculate category-based styling
+  const getTaskCategoryStyle = () => {
     if (task.status === 'completed') {
-      return 'border-green-200 bg-green-50';
-    } else if (isActiveTask) {
-      return 'border-blue-500 bg-blue-50 shadow-md';
-    } else {
-      // Get colors based on task category
-      switch(primaryCategory?.toLowerCase()) {
-        case 'work':
-          return 'border-blue-400 bg-blue-50';
-        case 'personal':
-          return 'border-purple-400 bg-purple-50';
-        case 'learning':
-          return 'border-green-400 bg-green-50';
-        case 'health':
-          return 'border-red-400 bg-red-50';
-        case 'meeting':
-          return 'border-yellow-400 bg-yellow-50';
-        case 'planning':
-          return 'border-indigo-400 bg-indigo-50';
-        case 'shopping':
-          return 'border-pink-400 bg-pink-50';
-        case 'social':
-          return 'border-sky-400 bg-sky-50';
-        case 'finance':
-          return 'border-teal-400 bg-teal-50';
-        case 'travel':
-          return 'border-violet-400 bg-violet-50';
-        default:
-          return 'border-gray-300 bg-gray-50';
-      }
+      return {
+        borderColor: 'rgba(34, 197, 94, 0.8)',
+        backgroundColor: 'rgba(240, 253, 244, 1)',
+        textColor: 'rgba(22, 163, 74, 1)'
+      };
     }
+    
+    // Get primary category
+    const category = Array.isArray(task.category) ? task.category[0] : task.category;
+    
+    const borderColor = getCategoryColor(category, 0.8);
+    const backgroundColor = getCategoryColor(category, 0.1);
+    const textColor = getCategoryColor(category, 1);
+    
+    // If active task, enhance the visual emphasis
+    if (isActiveTask) {
+      return {
+        borderColor,
+        backgroundColor: getCategoryColor(category, 0.2),
+        textColor
+      };
+    }
+    
+    return {
+      borderColor,
+      backgroundColor,
+      textColor
+    };
   };
+
+  const taskStyle = getTaskCategoryStyle();
 
   return (
     <>
@@ -116,11 +121,20 @@ export default function TimelineBlock({
           )}
         >
           <div
-            className={`ml-4 h-full rounded-lg border-l-4 p-2 ${getTaskStatusClasses()}`}
+            className="ml-4 h-full rounded-lg border-l-4 p-2"
+            style={{
+              borderLeftColor: taskStyle.borderColor,
+              backgroundColor: taskStyle.backgroundColor
+            }}
           >
             <div className="flex items-start justify-between">
               <div>
-                <span className="text-sm font-medium text-gray-900">{task.title}</span>
+                <span 
+                  className="text-sm font-medium"
+                  style={{ color: taskStyle.textColor }}
+                >
+                  {task.title}
+                </span>
                 <div className="flex items-center gap-2 text-xs text-gray-500">
                   <Clock className="w-3 h-3" />
                   <span>{format(taskDueTime, 'HH:mm')}</span>
@@ -202,33 +216,10 @@ export default function TimelineBlock({
         // Position calculation
         const position = getPositionAndHeight(startTime, endTime);
         
-        // Get session color based on task category
-        const getSessionColor = () => {
-          switch(primaryCategory?.toLowerCase()) {
-            case 'work':
-              return !session.end_time ? 'bg-blue-300 border-blue-400' : 'bg-blue-200 border-blue-400 hover:bg-blue-300';
-            case 'personal':
-              return !session.end_time ? 'bg-purple-300 border-purple-400' : 'bg-purple-200 border-purple-400 hover:bg-purple-300';
-            case 'learning':
-              return !session.end_time ? 'bg-green-300 border-green-400' : 'bg-green-200 border-green-400 hover:bg-green-300';
-            case 'health':
-              return !session.end_time ? 'bg-red-300 border-red-400' : 'bg-red-200 border-red-400 hover:bg-red-300';
-            case 'meeting':
-              return !session.end_time ? 'bg-yellow-300 border-yellow-400' : 'bg-yellow-200 border-yellow-400 hover:bg-yellow-300';
-            case 'planning':
-              return !session.end_time ? 'bg-indigo-300 border-indigo-400' : 'bg-indigo-200 border-indigo-400 hover:bg-indigo-300';
-            case 'shopping':
-              return !session.end_time ? 'bg-pink-300 border-pink-400' : 'bg-pink-200 border-pink-400 hover:bg-pink-300';
-            case 'social': 
-              return !session.end_time ? 'bg-sky-300 border-sky-400' : 'bg-sky-200 border-sky-400 hover:bg-sky-300';
-            case 'finance':
-              return !session.end_time ? 'bg-teal-300 border-teal-400' : 'bg-teal-200 border-teal-400 hover:bg-teal-300';
-            case 'travel':
-              return !session.end_time ? 'bg-violet-300 border-violet-400' : 'bg-violet-200 border-violet-400 hover:bg-violet-300';
-            default:
-              return !session.end_time ? 'bg-gray-300 border-gray-400' : 'bg-gray-200 border-gray-400 hover:bg-gray-300';
-          }
-        };
+        // Get category for coloring the session
+        const category = Array.isArray(task.category) ? task.category[0] : task.category;
+        const sessionColor = getCategoryColor(category, 0.7);
+        const sessionBgColor = getCategoryColor(category, 0.2);
         
         return (
           <motion.div
@@ -239,7 +230,11 @@ export default function TimelineBlock({
             style={position}
           >
             <div
-              className={`ml-4 h-full rounded-lg ${getSessionColor()} transition-colors cursor-pointer group border`}
+              className="ml-4 h-full rounded-lg hover:opacity-90 transition-opacity cursor-pointer group border"
+              style={{
+                backgroundColor: !session.end_time ? sessionBgColor : sessionBgColor,
+                borderColor: sessionColor
+              }}
             >
               <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute top-0 left-0 right-0 bg-white/90 p-2 text-xs rounded-t-lg shadow-md z-20">
                 <div className="font-medium text-gray-800">{task.title}</div>
@@ -254,8 +249,10 @@ export default function TimelineBlock({
                   </button>
                 )}
               </div>
-              <div className="px-2 py-1 truncate text-xs font-medium"
-                   style={{ color: getCategoryColor(primaryCategory || 'default', 0.9) }}>
+              <div 
+                className="px-2 py-1 truncate text-xs font-medium"
+                style={{ color: sessionColor }}
+              >
                 {format(startTime, 'HH:mm')} - {session.end_time ? format(endTime, 'HH:mm') : 'Now'}
               </div>
             </div>

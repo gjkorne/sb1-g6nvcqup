@@ -9,11 +9,10 @@ import FocusMode from './components/FocusMode';
 import AIAssistant from './components/AIAssistant';
 import { useTaskStore } from './store/taskStore';
 import { useTimeStore } from './store/timeStore';
-import { Bot } from 'lucide-react';
-import { supabase } from './lib/supabase';
+import { Bot, AlertCircle } from 'lucide-react';
+import { supabase, testConnection } from './lib/supabase'; 
 import Auth from './components/Auth';
 import { startOfDay, endOfDay, addDays } from 'date-fns';
-
 
 function App() {
   const tasks = useTaskStore((state) => state.tasks);
@@ -21,32 +20,103 @@ function App() {
   const loadSessions = useTimeStore((state) => state.loadSessions);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<'dashboard' | 'today' | 'upcoming' | 'all'>('dashboard');
+  const [isSupabaseConfigured] = useState(() => {
+    return !!(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
+  });
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setIsAuthenticated(!!session);
-      setIsLoading(false);
-      if (session) {
-        Promise.all([
-          loadTasks(),
-          loadSessions()
-        ]);
-      }
-    });
+    let mounted = true;
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setIsAuthenticated(!!session);
-      if (session) {
-        Promise.all([
-          loadTasks(),
-          loadSessions()
-        ]);
-      }
-    });
+    const initializeAuth = async () => {
+      if (!mounted) return;
+      setError(null);
+      setIsLoading(true);
 
-    return () => subscription.unsubscribe();
-  }, [loadTasks]);
+      if (!isSupabaseConfigured) {
+        setError('Please connect to Supabase to continue.');
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!mounted) return;
+
+        setIsAuthenticated(!!session?.user);
+        
+        if (session?.user) {
+          try {
+            await Promise.all([
+              loadTasks(),
+              loadSessions()
+            ]);
+            if (mounted) {
+              setIsLoading(false);
+            }
+          } catch (err) {
+            console.error('Error loading initial data:', err);
+            if (mounted) {
+              setError(err instanceof Error ? err.message : 'Failed to load your tasks');
+              setIsLoading(false);
+            }
+          }
+        } else {
+          if (mounted) {
+            setIsLoading(false);
+          }
+        }
+      } catch (error) {
+        console.error('Error initializing auth:', error);
+        if (mounted) {
+          setError(error instanceof Error ? error.message : 'Authentication error');
+          setIsLoading(false);
+        }
+      }
+    };
+
+    initializeAuth();
+
+    // Set up auth listener if Supabase is initialized
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
+        if (!mounted) return;
+
+        setIsAuthenticated(!!session?.user);
+        setIsLoading(true);
+        
+        if (session?.user) {
+          try {
+            await Promise.all([
+              loadTasks(),
+              loadSessions()
+            ]);
+          } catch (err) {
+            console.error('Error loading data:', err);
+            if (mounted) {
+              setError('Failed to load your tasks');
+            }
+          }
+        } else {
+          // Clear tasks and sessions on sign out
+          useTaskStore.setState({ tasks: [], activeTask: null });
+          useTimeStore.setState({ sessions: [], currentSession: null });
+        }
+        
+        if (mounted) {
+          if (mounted) {
+            setIsLoading(false);
+          }
+        }
+      }
+    );
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, [isSupabaseConfigured, loadSessions, loadTasks]);
 
   const filteredTasks = tasks.filter(task => {
     if (view === 'today') {
@@ -65,8 +135,32 @@ function App() {
   if (isLoading) {
     return (
       <Layout view={view} onViewChange={setView}>
-        <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" />
+        <div className="flex flex-col items-center justify-center min-h-[calc(100vh-4rem)] gap-4">
+          <div className="relative">
+            <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-200"/>
+            <div className="absolute top-0 right-0 bottom-0 left-0 rounded-full border-t-4 border-blue-600"/>
+          </div>
+          <p className="text-lg font-medium text-gray-700">Loading your tasks...</p>
+          <p className="text-sm text-gray-500">This may take a moment</p>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (error) {
+    return (
+      <Layout view={view} onViewChange={setView}>
+        <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)] gap-4">
+          <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg flex items-center gap-2">
+            <AlertCircle className="w-5 h-5" />
+            <p>{error}</p>
+          </div>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Refresh Page
+          </button>
         </div>
       </Layout>
     );

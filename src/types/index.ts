@@ -13,7 +13,7 @@ export interface SubtaskWithEstimate {
 export interface Task {
   id: string;
   title: string;
-  description?: string;
+  description: string | null;
   category: string;
   tags: string[];
   priority: 'low' | 'medium' | 'high';
@@ -26,18 +26,24 @@ export interface Task {
   progress: number;
   subtasks: SubtaskWithEstimate[];
   status: 'todo' | 'in_progress' | 'completed';
-  dueDate?: Date;
+  dueDate: Date | null;
   timeSpent: number; // in seconds
   createdAt: Date;
   updatedAt: Date;
+  completedAt: Date | null;
+  task_status: 'not_started' | 'in_progress' | 'completed';
 }
 
 export interface TimeSession {
   id: string;
-  taskId: string;
-  startTime: Date;
-  endTime?: Date;
+  task_id: string;
+  start_time: Date | string;
+  end_time?: Date | string | null;
   duration: number; // in seconds
+  user_id?: string;
+  time_zone?: string;
+  session_type?: 'manual' | 'pomodoro' | 'focus' | 'auto';
+  notes?: string;
 }
 
 export interface PomodoroSettings {

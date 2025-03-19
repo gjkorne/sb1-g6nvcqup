@@ -1,13 +1,8 @@
 import { create } from 'zustand';
 import { Task } from '../types';
 import { v4 as uuidv4 } from 'uuid';
-import { supabase } from '../lib/supabase';
-
-async function getCurrentUserId() {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('User must be authenticated');
-  return user.id;
-}
+import { supabase, testConnection } from '../lib/supabase';
+import { TimeEstimate } from '../types';
 
 interface TaskState {
   tasks: Task[];
@@ -30,7 +25,15 @@ interface TaskState {
   updateTaskCategory: (taskId: string, category: string, add: boolean) => Promise<void>;
 }
 
-export const useTaskStore = create<TaskState>((set) => ({
+// Helper function to get current user ID
+async function getCurrentUserId() {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('User must be authenticated');
+  return user.id;
+}
+
+// Create store instance
+const createTaskStore = (set: any) => ({
   tasks: [],
   deletedTasks: [],
   activeTask: null,
@@ -55,39 +58,61 @@ export const useTaskStore = create<TaskState>((set) => ({
       console.error('Error setting task active:', error);
     }
   },
-  getActiveTask: () => get().activeTask,
+  getActiveTask: () => useTaskStore.getState().activeTask,
   loadTasks: async () => {
-    const { data: tasks, error } = await supabase
-      .from('tasks')
-      .select(`
-        *,
-        subtasks (*)
-      `)
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false });
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) {
+        throw new Error('User not authenticated');
+      }
 
-    if (error) {
-      console.error('Error loading tasks:', error);
-      return;
-    }
+      const { data: tasks, error } = await supabase
+        .from('tasks')
+        .select(`
+          *,
+          subtasks (
+            *
+          )
+        `)
+        .is('deleted_at', null)
+        .eq('user_id', session.user.id)
+        .order('created_at', { ascending: false })
+        .then(result => {
+          if (result.error) throw result.error;
+          return result.data || [];
+        });
 
-    // Convert time_estimate from database to TimeEstimate object
-    const formattedTasks = tasks?.map(task => ({
-      ...task,
-      timeEstimate: task.time_estimate ? {
-        value: task.time_estimate,
-        unit: 'minutes'
-      } : undefined,
-      subtasks: task.subtasks?.map((subtask: any) => ({
-        ...subtask,
-        timeEstimate: subtask.time_estimate ? {
-          value: subtask.time_estimate,
+      if (error) {
+        throw error;
+      }
+
+      // Convert time_estimate from database to TimeEstimate object
+      const formattedTasks = tasks?.map(task => ({
+        ...task,
+        dueDate: task.due_date ? new Date(task.due_date) : null,
+        createdAt: new Date(task.created_at),
+        updatedAt: new Date(task.updated_at),
+        completedAt: task.completed_at ? new Date(task.completed_at) : null,
+        timeEstimate: task.time_estimate ? {
+          value: task.time_estimate,
           unit: 'minutes'
-        } : undefined
-      })) || []
-    })) || [];
+        } : undefined,
+        subtasks: task.subtasks?.map((subtask: any) => ({
+          ...subtask,
+          dueDate: subtask.due_date ? new Date(subtask.due_date) : null,
+          timeEstimate: subtask.time_estimate ? {
+            value: subtask.time_estimate,
+            unit: 'minutes'
+          } : undefined
+        })) || []
+      })) || [];
 
-    set({ tasks: formattedTasks });
+      set({ tasks: formattedTasks });
+    } catch (error) {
+      console.error('Error loading tasks:', error);
+      set({ tasks: [] }); // Set empty array on error to prevent undefined
+      throw error;
+    }
   },
   addTask: async (taskData) => {
     const newTask: Task = {
@@ -347,7 +372,7 @@ export const useTaskStore = create<TaskState>((set) => ({
 
       if (error) throw error;
 
-      const restoredTask = get().deletedTasks.find(t => t.id === taskId);
+      const restoredTask = useTaskStore.getState().deletedTasks.find(t => t.id === taskId);
       set((state) => ({
         tasks: [...state.tasks, restoredTask],
         deletedTasks: state.deletedTasks.filter(t => t.id !== taskId),
@@ -469,4 +494,7 @@ export const useTaskStore = create<TaskState>((set) => ({
     set((state) => ({
       activeTask: task
     }))
-}));
+});
+
+// Create and export the store
+export const useTaskStore = create<TaskState>(createTaskStore);

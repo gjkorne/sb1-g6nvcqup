@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { Menu, X, Settings, Calendar, Clock, BarChart, LogOut, Sun, Calendar as CalendarIcon, ListTodo, Star, PieChart } from 'lucide-react';
 import { useState, lazy, Suspense } from 'react';
 import { supabase } from '../lib/supabase';
 import { format } from 'date-fns';
+import { useTaskStore } from '../store/taskStore';
+import { useTimeStore } from '../store/timeStore';
 
 const TimeAnalyticsDashboard = lazy(() => import('./TimeAnalyticsDashboard'));
 
@@ -15,6 +17,33 @@ interface LayoutProps {
 export default function Layout({ children, view = 'all', onViewChange }: LayoutProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+
+  const handleSignOut = useCallback(async () => {
+    try {
+      setIsSigningOut(true);
+      
+      // Clear all application state
+      useTaskStore.setState({ tasks: [], activeTask: null });
+      useTimeStore.setState({ sessions: [], currentSession: null });
+      
+      // Clear all storage
+      localStorage.clear();
+      sessionStorage.clear();
+      
+      // Sign out from Supabase
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      
+      // Force a full page reload to clear all state
+      window.location.reload();
+      
+    } catch (error) {
+      console.error('Error signing out:', error);
+      setIsSigningOut(false);
+      alert('Failed to sign out. Please try again.');
+    }
+  }, []);
 
   const navigationItems = [
     { icon: BarChart, label: 'Dashboard', value: 'dashboard' },
@@ -89,11 +118,16 @@ export default function Layout({ children, view = 'all', onViewChange }: LayoutP
               <p className="mt-1 text-xs text-blue-600">6/10 tasks completed</p>
             </div>
             <button
-              onClick={() => supabase.auth.signOut()}
-              className="flex items-center gap-2 mt-4 p-2 w-full text-gray-600 hover:text-gray-900"
+              onClick={handleSignOut}
+              disabled={isSigningOut}
+              className={`flex items-center gap-2 mt-4 p-2 w-full ${
+                isSigningOut 
+                  ? 'text-gray-400 cursor-not-allowed' 
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
             >
-              <LogOut className="w-5 h-5" />
-              <span>Sign out</span>
+              <LogOut className={`w-5 h-5 ${isSigningOut ? 'animate-spin' : ''}`} />
+              <span>{isSigningOut ? 'Signing out...' : 'Sign out'}</span>
             </button>
           </div>
         </div>

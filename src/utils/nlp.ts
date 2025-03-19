@@ -2,19 +2,22 @@ import OpenAI from 'openai';
 import { NLPTaskResult } from '../types';
 import { parseISO } from 'date-fns';
 
-const API_KEY = import.meta.env.VITE_OPENAI_API_KEY?.trim();
+const API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
 
 // Check if API key is properly configured
-const isValidApiKey = API_KEY && 
-  API_KEY.startsWith('sk-') && 
-  API_KEY.length > 40;
+const isValidApiKey = API_KEY && typeof API_KEY === 'string' && API_KEY.trim().startsWith('sk-');
 
-const openai = isValidApiKey 
-  ? new OpenAI({
-      apiKey: API_KEY,
+let openai: OpenAI | null = null;
+try {
+  if (isValidApiKey) {
+    openai = new OpenAI({
+      apiKey: API_KEY.trim(),
       dangerouslyAllowBrowser: true
-    }) 
-  : null;
+    });
+  }
+} catch (error) {
+  console.error('Failed to initialize OpenAI client:', error);
+}
 
 export async function processTaskWithNLP(input: string): Promise<NLPTaskResult & { error?: string }> {
   // If OpenAI is not configured, return basic task structure
@@ -22,12 +25,13 @@ export async function processTaskWithNLP(input: string): Promise<NLPTaskResult &
     return {
       title: input,
       category: 'general',
-      aiResponse: "I've added this as a basic task. Please make sure your OpenAI API key is properly configured in the .env file. The key should start with 'sk-' and be about 51 characters long.",
+      aiResponse: "I've added this as a basic task. Please configure your OpenAI API key to enable AI features.",
       tags: [],
       subtasks: [],
       description: null,
-      error: 'OpenAI API key not configured or invalid. Please check your .env file.',
-      timeEstimate: null
+      timeEstimate: null,
+      priority: 'medium',
+      error: 'OpenAI API key not configured or invalid. Please check your environment variables.'
     };
   }
 
@@ -111,12 +115,13 @@ export async function processTaskWithNLP(input: string): Promise<NLPTaskResult &
       console.error('Failed to parse OpenAI response:', parseError);
       return {
         title: input,
-        category: 'general',
-        aiResponse: "I'll add this as a basic task since I had trouble processing the AI response.",
+        category: ['general'],
+        aiResponse: "I've added this as a basic task. The AI assistant is currently unavailable.",
         tags: [],
         subtasks: [],
         timeEstimate: null,
         description: null,
+        priority: 'medium',
         error: 'Error parsing AI response'
       };
     }
@@ -161,11 +166,12 @@ export async function processTaskWithNLP(input: string): Promise<NLPTaskResult &
     if (error?.status === 429) {
       return {
         title: input,
-        category: 'general',
+        category: ['general'],
         tags: [],
         subtasks: [],
         timeEstimate: null,
         description: null,
+        priority: 'medium',
         error: 'AI processing unavailable (quota exceeded). Using basic task creation.'
       };
     }
@@ -173,12 +179,13 @@ export async function processTaskWithNLP(input: string): Promise<NLPTaskResult &
     // Return basic task structure on other errors
     return {
       title: input,
-      category: 'general',
-      aiResponse: "I've added this as a basic task. I'll be more helpful once AI processing is available again.",
+      category: ['general'],
+      aiResponse: "I've added this as a basic task. The AI assistant is temporarily unavailable.",
       tags: [],
       subtasks: [],
       timeEstimate: null,
       description: null,
+      priority: 'medium',
       error: 'Error processing with AI. Using basic task creation.'
     };
   }
